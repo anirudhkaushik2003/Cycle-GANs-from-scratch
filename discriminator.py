@@ -40,3 +40,5 @@ class Discriminator(nn.Module):
         x = self.conv4(x)
         x = self.out(x)
         x = self.sigmoid(x)
+
+        return x
