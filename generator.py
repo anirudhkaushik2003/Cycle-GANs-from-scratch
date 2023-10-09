@@ -15,7 +15,7 @@ class ResBlock(nn.Module):
         self.norm1 = nn.InstanceNorm2d(out_ch)
         self.relu = nn.LeakyReLU(0.2)
 
-        self.conv2 = nn.conv2D(
+        self.conv2 = nn.Conv2d(
             out_ch, out_ch, stride=stride, kernel_size=3, padding="same"
         )
         self.norm2 = nn.InstanceNorm2d(out_ch)
