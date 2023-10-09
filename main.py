@@ -12,11 +12,12 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, datasets
 from generator import Generator
 from discriminator import Discriminator
+from datasets import HorseZebraDataset
 
 from utils import *
 
 BATCH_SIZE = 1
-IMAGE_SIZE = 32
+IMAGE_SIZE = 256
 
 data_transforms = transforms.Compose([
     transforms.Resize(IMAGE_SIZE),
@@ -24,8 +25,20 @@ data_transforms = transforms.Compose([
     transforms.Normalize((0.5,), (0.5,)),
 ])
 
-dataset = torchvision.datasets.MNIST(root='', train=True, download=True, transform=data_transforms)
-dataset2 = torchvision.datasets.CIFAR10(root='', train=True, download=True, transform=data_transforms)
+TRAIN_DIR = "/ssd_scratch/cvit/anirudhkaushik/datasets/cyclegan/horse2zebra/horse2zebra"
+VAL_DIR = "/ssd_scratch/cvit/anirudhkaushik/datasets/cyclegan/horse2zebra/horse2zebra"
+
+dataset = HorseZebraDataset(
+    root_horse=TRAIN_DIR + "/trainA",
+    root_zebra=TRAIN_DIR + "/trainB",
+    transform=transforms,
+)
+val_dataset = HorseZebraDataset(
+    root_horse=VAL_DIR + "/testA",
+    root_zebra=VAL_DIR + "/testB",
+    transform=transforms,
+)
+
 # dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 # dataloader2 = DataLoader(dataset2, batch_size=BATCH_SIZE, shuffle=True)
 
@@ -39,7 +52,8 @@ modelD_1.apply(weights_init)
 
 dummy_img = np.ones((BATCH_SIZE, 6, IMAGE_SIZE, IMAGE_SIZE))
 output_shape = modelD_1(torch.FloatTensor(dummy_img)).shape
-
+print(output_shape)
+exit(0)
 modelG_1 = torch.nn.DataParallel(modelG_1)
 modelD_1 = torch.nn.DataParallel(modelD_1)
 
@@ -48,7 +62,7 @@ modelG_1 = modelG_1.to(device)
 modelD_1 = modelD_1.to(device)
 
 modelG_2 = Generator(256, 3*2)
-modelD_2 = Discriminator(256, 3*2)
+modelD_2 = Discriminator(3*2)
 
 modelG_2.apply(weights_init)
 modelD_2.apply(weights_init)
