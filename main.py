@@ -29,13 +29,12 @@ print("Random Seed: ", manualSeed)
 random.seed(manualSeed)
 torch.manual_seed(manualSeed)
 # torch.use_deterministic_algorithms(True) # Needed for reproducible results
-
 data_transforms = transforms.Compose([
-    transforms.Resize(IMAGE_SIZE),
+    transforms.Resize((IMAGE_SIZE,IMAGE_SIZE)),
     transforms.ToTensor(),
-    transforms.Normalize((0.5,), (0.5,)),
+    transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5)),
+    transforms.Lambda(lambda x: (x-x.min())/(x.max() - x.min()))
 ])
-
 TRAIN_DIR = "/ssd_scratch/cvit/anirudhkaushik/datasets/cyclegan/horse2zebra/horse2zebra"
 VAL_DIR = "/ssd_scratch/cvit/anirudhkaushik/datasets/cyclegan/horse2zebra/horse2zebra"
 
@@ -59,6 +58,12 @@ val_dataset2 = ZebraDataset(
 
 dataset = torch.utils.data.ConcatDataset([dataset, val_dataset])
 dataset2 = torch.utils.data.ConcatDataset([dataset2, val_dataset2])
+
+min_length = min(len(dataset), len(dataset2))
+
+#make both datasets of equal length
+dataset = torch.utils.data.Subset(dataset, np.arange(min_length))
+dataset2 = torch.utils.data.Subset(dataset2, np.arange(min_length))
 
 dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 dataloader2 = DataLoader(dataset2, batch_size=BATCH_SIZE, shuffle=True)
@@ -126,7 +131,7 @@ def generate_real_images( n_samples, patch_shape):
 
 def generate_fake_images(model, dataset, patch_shape ):
     X = model(dataset)
-    y = np.zeros((len(X), 1, patch_shape, patch_shape, ))
+    y = np.zeros((X.shape[0], 1, patch_shape, patch_shape, ))
     y = torch.FloatTensor(y)
     return X, y
 
@@ -156,7 +161,7 @@ lambda_2 = 10
 real1 = dataloader
 real2 = dataloader2
 
-n_epoch, n_batch = epochs, 1
+n_epoch, n_batch = epochs, BATCH_SIZE
 n_patch = output_shape[-1]
 
 pool1, pool2 = list(), list()
@@ -174,22 +179,22 @@ def set_model_grad(model, flag=True, multiGPU=True):
             param.requires_grad = flag
 
 
-def train_composite_model(modelG, modelG_2, modelD_1, dataset1, dataset2, y_fake1):
+def train_composite_model(modelG, modelG_2, modelD_1, dataset1, dataset2, y_real):
     # adversarial loss
     outputg_1 = modelG(dataset1)
     outputd_1 = modelD_1(outputg_1.detach())
     D_1 = outputd_1.mean().item()
-    loss1 = criterion1(outputd_1, y_fake1)
+    loss1 = criterion1(outputd_1, y_real)
     # identity loss
-    outputg_1_id = modelG(dataset2) # give monet to monet generator
+    outputg_1_id = modelG(dataset2) # give zebra to zebra generator
     loss2 = criterion2(outputg_1_id, dataset2)
     # cycle loss (forward)  
-    outputg_2 = modelG_2(outputg_1) # give generated monet to normal generator
-    loss3 = criterion3(outputg_2, dataset1) # reverse the monet to original normal image
+    outputg_2 = modelG_2(outputg_1.detach()) # give generated zebra to horse generator
+    loss3 = criterion3(outputg_2, dataset1) # reverse the zebra to original horse image
     # cycle loss (backward)
-    outputg_2_id = modelG_2(dataset1) # give real image to real image generator
-    outputg_1_b = modelG(outputg_2_id.detach()) # give identity preserved real image to monet generator
-    loss4 = criterion4(outputg_1_b, outputg_1_id.detach())
+    outputg_2_id = modelG_2(dataset2) # give zebra image to horse image generator
+    outputg_1_b = modelG(outputg_2_id.detach()) # give generated horse image to zebra generator
+    loss4 = criterion4(outputg_1_b, dataset2) # reverse the horse to original zebra image
 
     lossG = loss1 + lambda_1*loss2 + lambda_2*loss3 + lambda_2*loss4
 
@@ -204,14 +209,14 @@ for epoch in range(epochs):
         X_real1 = X_real1.to(device)
         X_real2 = X_real2.to(device)
 
-        y_real1 = generate_real_images(BATCH_SIZE, n_patch)
-        y_real2 = generate_real_images(BATCH_SIZE, n_patch)
+        y_real1 = generate_real_images(X_real1.shape[0], n_patch)
+        y_real2 = generate_real_images(X_real2.shape[0], n_patch)
 
         y_real1 = y_real1.to(device)
         y_real2 = y_real2.to(device)
 
-        X_fake1, y_fake1 = generate_fake_images(modelG_1, X_real2, n_patch)
-        X_fake2, y_fake2 = generate_fake_images(modelG_2, X_real1, n_patch)
+        X_fake1, y_fake1 = generate_fake_images(modelG_1, X_real1, n_patch) # fake zebra images
+        X_fake2, y_fake2 = generate_fake_images(modelG_2, X_real2, n_patch) # fake horse images
 
 
         X_fake1 = X_fake1.to(device)
@@ -219,83 +224,86 @@ for epoch in range(epochs):
         y_fake1 = y_fake1.to(device)   
         y_fake2 = y_fake2.to(device)
 
-        # update images via buffer
-        X_fake1 = update_image_pool(pool1, X_fake1)
-        X_fake2 = update_image_pool(pool2, X_fake2)
+        # # update images via buffer
+        # X_fake1 = update_image_pool(pool1, X_fake1)
+        # X_fake2 = update_image_pool(pool2, X_fake2)
 
-        if(X_fake1.shape[0] > 1):
-            print(X_fake1.shape)
+        # X_fake1 = torch.FloatTensor(X_fake1)
+        # X_fake2 = torch.FloatTensor(X_fake2)
 
-        X_fake1 = torch.FloatTensor(X_fake1)
-        X_fake2 = torch.FloatTensor(X_fake2)
-
-        X_fake1 = X_fake1.to(device)
-        X_fake2 = X_fake2.to(device)
+        # X_fake1 = X_fake1.to(device)
+        # X_fake2 = X_fake2.to(device)
 
 
-        set_model_grad(modelD_1, True)
-        set_model_grad(modelD_2, True)
-
-        # Train Discriminator1
-        # update on real batch 
-        optimizerD.zero_grad()
-        outputd_1_real = modelD_1(X_real1)
-        D_1_real = outputd_1_real.mean().item()
-        lossd1_real = criterion1(outputd_1_real, y_real1)
-        lossd1_real.backward()
-
-        # Train Discrimator2
-        # update on real batch
-        outputd2_real = modelD_2(X_real2)
-        D_2_real = outputd2_real.mean().item()
-        lossd2_real = criterion1(outputd2_real, y_real2)
-        lossd2_real.backward()
-
-        optimizerD.step()
-
-        # Train Discriminator1
-        # update on fake batch
-        outputd_1_fake = modelD_1(X_fake1.detach())
-        D_1_fake = outputd_1_fake.mean().item()
-        lossd1_fake = criterion1(outputd_1_fake, y_fake1)
-        lossd1_fake.backward()
-
-        # Train Discrimator2
-        # update on fake batch
-        outputd2_fake = modelD_2(X_fake2.detach())
-        D_2_fake = outputd2_fake.mean().item()
-        lossd2_fake = criterion1(outputd2_fake, y_fake2)
-        lossd2_fake.backward()
-
-        optimizerD.step()
-
-        lossd1 = (lossd1_real + lossd1_fake)
-        lossd2 = (lossd2_real + lossd2_fake)
-        
-
-
-
-
-        
         set_model_grad(modelD_1, False)
         set_model_grad(modelD_2, False)
         #Train Generator (monet -> real) and (real -> monet)
         optimizerG.zero_grad()
 
-        D_1_horse, lossG_1 = train_composite_model(modelG_1, modelG_2, modelD_1, X_real1, X_real2, y_fake1)
+        D_1_horse, lossG_1 = train_composite_model(modelG_1, modelG_2, modelD_1, X_real1, X_real2, y_real1)
 
-        D_2_zebra, lossG_2 = train_composite_model(modelG_2, modelG_1, modelD_2, X_real2, X_real1, y_fake2)
+        D_2_zebra, lossG_2 = train_composite_model(modelG_2, modelG_1, modelD_2, X_real2, X_real1, y_real2)
 
         lossG = lossG_1 + lossG_2
         lossG.backward()
         optimizerG.step()
 
+        set_model_grad(modelD_1, True)
+        set_model_grad(modelD_2, True)
+
+        # # Train Discriminator1
+        # # update on real batch 
+        optimizerD.zero_grad()
+        outputd_1_real = modelD_1(X_real2) # give zebra images to zebra discriminator
+        D_1_real = outputd_1_real.mean().item()
+        lossd1_real = criterion1(outputd_1_real, y_real2)
+
+        outputd_1_horse = modelD_1(X_real1) # give real horse images to zebra discriminator
+        lossd1_horse = criterion1(outputd_1_real, y_fake1)  # tell it that real horse images are also fake
+
+        # Train Discrimator2
+        # update on real batch
+        outputd2_real = modelD_2(X_real1) # give horse images to horse discriminator
+        D_2_real = outputd2_real.mean().item()
+        lossd2_real = criterion1(outputd2_real, y_real1)
+
+        outputd_2_zebra = modelD_2(X_real2) # give real zebra images to horse discriminator
+        lossd_2_zebra = criterion1(outputd_2_zebra, y_fake2)    
+
+        # Train Discriminator1
+        # update on fake batch
+        outputd_1_fake = modelD_1(X_fake1.detach()) # fake zerbra images to zebra discriminator
+        D_1_fake = outputd_1_fake.mean().item()
+        lossd1_fake = criterion1(outputd_1_fake, y_fake1)
+
+        # Train Discrimator2
+        # update on fake batch
+        outputd2_fake = modelD_2(X_fake2.detach()) # fake horse images to horse discriminator
+        D_2_fake = outputd2_fake.mean().item()
+        lossd2_fake = criterion1(outputd2_fake, y_fake2)
+
+
+        lossd1 = (lossd1_real + lossd1_fake + lossd1_horse)/3
+        lossd2 = (lossd2_real + lossd2_fake + lossd_2_zebra)/3
+
+        lossd1.backward()
+        lossd2.backward()
+
+        optimizerD.step()
+        
+
+        
+        
+
 
 
     if(epoch%1 == 0):
         # print(f"Epoch: {epoch}, LossG_1: {lossG_1}, LossG_2: {lossG_2}, LossD_1: {lossd1}, LossD_2: {lossd2}")
+        print("==========================================")
         print(f"Epoch: {epoch:.2f} D_1_real: {D_1_real:.2f}, D_1_fake: {D_1_fake:.2f}, D_2_real: {D_2_real:.2f}, D_2_fake: {D_2_fake:.2f}, D_1_horse: {D_1_horse:.2f}, D_2_zebra: {D_2_zebra:.2f}")
         print(f"loss d1 real: {lossd1_real.item():.2f} loss d1 fake: {lossd1_fake.item():.2f} loss d2 real: {lossd2_real.item():.2f} loss d2 fake: {lossd2_fake.item():.2f}")
+        print(f"Loss G1: {lossG_1.item():.2f}, Loss G2: {lossG_2.item():.2f}")
+        print()
     if (epoch)%1 == 0:
         create_checkpoint(modelG_1, optimizerG, epoch, lossG_1, multiGPU=True, type="G1")
         create_checkpoint(modelD_1, optimizerD, epoch, lossd1, multiGPU=True, type="D1")
