@@ -35,7 +35,7 @@ class ResBlock(nn.Module):
 
 
 class DownBlock(nn.Module):
-    def __init__(self, in_ch, out_ch, k=3, s=2, p=1):
+    def __init__(self, in_ch, out_ch, k=4, s=2, p=1):
         super(DownBlock, self).__init__()
         self.conv = nn.Conv2d(
             in_ch, out_ch, kernel_size=k, stride=s, padding=p
@@ -50,10 +50,10 @@ class DownBlock(nn.Module):
         return x
     
 class UpBlock(nn.Module):
-    def __init__(self, in_ch, out_ch, k=3, s=2, p=1):
+    def __init__(self, in_ch, out_ch, k=4, s=2, p=1):
         super(UpBlock, self).__init__()
         self.conv = nn.ConvTranspose2d(
-            in_ch, out_ch, kernel_size=k, stride=s, padding=p, output_padding=1
+            in_ch, out_ch, kernel_size=k, stride=s, padding=p,
         )
         self.norm = nn.InstanceNorm2d(out_ch)
         self.relu = nn.LeakyReLU(0.2)
@@ -72,8 +72,8 @@ class Generator(nn.Module):
 
         self.conv1 = DownBlock(img_channels, 64, 7, 1, p=3) # conv2d
 
-        self.conv2 = DownBlock(64, 128, 3, 2, 1) # down sample
-        self.conv3 = DownBlock(128, 256, 3, 2, 1) # down sample
+        self.conv2 = DownBlock(64, 128, 4, 2, 1) # down sample
+        self.conv3 = DownBlock(128, 256, 4, 2, 1) # down sample
         
         res_blocks = []
 
@@ -82,8 +82,8 @@ class Generator(nn.Module):
 
         self.res_blocks = nn.Sequential(*res_blocks)
 
-        self.conv4 = UpBlock(256, 128, 3, 2, 1) # up sample
-        self.conv5 = UpBlock(128, 64, 3, 2, 1) # up sample
+        self.conv4 = UpBlock(256, 128, 4, 2, 1) # up sample
+        self.conv5 = UpBlock(128, 64, 4, 2, 1) # up sample
 
         self.conv6 = DownBlock(64, img_channels, 7, 1, p=3) # conv2d
         self.tanh = nn.Tanh()

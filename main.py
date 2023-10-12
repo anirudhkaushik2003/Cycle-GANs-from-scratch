@@ -15,6 +15,8 @@ from discriminator import Discriminator
 from datasets import HorseDataset
 from datasets import ZebraDataset
 
+import itertools
+
 from utils import *
 
 BATCH_SIZE = 1
@@ -83,12 +85,17 @@ modelD_2 = torch.nn.DataParallel(modelD_2)
 modelG_2 = modelG_2.to(device)
 modelD_2 = modelD_2.to(device)
 
-learning_rate = 2e-4
-optimizerD_1 = torch.optim.Adam(modelD_1.parameters(), lr = learning_rate, betas=(0.5, 0.999))
-optimizerD_2 = torch.optim.Adam(modelD_2.parameters(), lr = learning_rate, betas=(0.5, 0.999))
+learning_rate = 2e-5
+# optimizerD_1 = torch.optim.Adam(modelD_1.parameters(), lr = learning_rate/10, betas=(0.5, 0.999))
+# optimizerD_2 = torch.optim.Adam(modelD_2.parameters(), lr = learning_rate/10, betas=(0.5, 0.999))
 
-optimizerG_1 = torch.optim.Adam(modelG_1.parameters(), lr=learning_rate, betas=(0.5, 0.999))
-optimizerG_2 = torch.optim.Adam(modelG_2.parameters(), lr=learning_rate, betas=(0.5, 0.999))
+optimizerD = torch.optim.Adam(itertools.chain(modelD_1.parameters(), modelD_2.parameters()), lr=learning_rate/10, betas=(0.5, 0.999))
+
+
+# optimizerG_1 = torch.optim.Adam(modelG_1.parameters(), lr=learning_rate, betas=(0.5, 0.999))
+# optimizerG_2 = torch.optim.Adam(modelG_2.parameters(), lr=learning_rate, betas=(0.5, 0.999))
+
+optimizerG = torch.optim.Adam(itertools.chain(modelG_1.parameters(), modelG_2.parameters()), lr=learning_rate, betas=(0.5, 0.999))
 
 epochs = 100
 
@@ -130,28 +137,58 @@ def update_image_pool(pool, images, max_size=50):
             ix = np.random.randint(0, len(pool))
             selected.append(pool[ix])
             pool[ix] = image
-            selected.append(pool[ix])
-            pool[ix] = image
 
     return np.asarray(selected)
 
 
 ################# TRAINING #####################
     
+lambda_1 = 5
+lambda_2 = 10
 
 real1 = dataloader
 real2 = dataloader2
 
+n_epoch, n_batch = epochs, 1
+n_patch = output_shape[-1]
+
+pool1, pool2 = list(), list()
+batch_per_epoch = int(len(dataset) / BATCH_SIZE)
+
+n_steps = batch_per_epoch * n_epoch
+
+
+def set_model_grad(model, flag=True):
+    for param in model.features.parameters():
+        param.requires_grad = flag
+
+
+def train_composite_model(modelG, modelG_2, modelD_1, dataset1, dataset2, y_fake1):
+    # adversarial loss
+    outputg_1 = modelG(dataset1)
+    outputd_1 = modelD_1(outputg_1.detach())
+    D_1 = outputd_1.mean().item()
+    loss1 = criterion1(outputd_1, y_fake1)
+    # identity loss
+    outputg_1_id = modelG(dataset2) # give monet to monet generator
+    loss2 = criterion2(outputg_1_id, dataset2)
+    # cycle loss (forward)  
+    outputg_2 = modelG_2(outputg_1) # give generated monet to normal generator
+    loss3 = criterion3(outputg_2, dataset1) # reverse the monet to original normal image
+    # cycle loss (backward)
+    outputg_2_id = modelG_2(dataset1) # give real image to real image generator
+    outputg_1_b = modelG(outputg_2_id.detach()) # give identity preserved real image to monet generator
+    loss4 = criterion4(outputg_1_b, outputg_1_id.detach())
+
+    lossG = loss1 + lambda_1*loss2 + lambda_2*loss3 + lambda_2*loss4
+
+    return D_1, lossG
+
 
 for epoch in range(epochs):
+    
     for i, (X_real1, X_real2) in enumerate(zip(real1, real2)):
-        n_epoch, n_batch = epochs, 1
-        n_patch = output_shape[-1]
-
-        pool1, pool2 = list(), list()
-        batch_per_epoch = int(len(dataset) / BATCH_SIZE)
-
-        n_steps = batch_per_epoch * n_epoch
+        
 
         X_real1 = X_real1.to(device)
         X_real2 = X_real2.to(device)
@@ -165,6 +202,7 @@ for epoch in range(epochs):
         X_fake1, y_fake1 = generate_fake_images(modelG_1, X_real2, n_patch)
         X_fake2, y_fake2 = generate_fake_images(modelG_2, X_real1, n_patch)
 
+
         X_fake1 = X_fake1.to(device)
         X_fake2 = X_fake2.to(device)
         y_fake1 = y_fake1.to(device)   
@@ -174,94 +212,76 @@ for epoch in range(epochs):
         X_fake1 = update_image_pool(pool1, X_fake1)
         X_fake2 = update_image_pool(pool2, X_fake2)
 
+        if(X_fake1.shape[0] > 1):
+            print(X_fake1.shape)
+
         X_fake1 = torch.FloatTensor(X_fake1)
         X_fake2 = torch.FloatTensor(X_fake2)
 
         X_fake1 = X_fake1.to(device)
         X_fake2 = X_fake2.to(device)
 
-        #Train Generator (monet -> real)
-        optimizerG_2.zero_grad()
 
-        # adversarial loss
-        outputg_2 = modelG_2(X_real2) # give monet to normal generator
-        outputd_2 = modelD_2(outputg_2)
-        loss1G2 = criterion1(outputd_2, y_fake2)
-        # identity loss
-        outputg_2_id = modelG_2(X_real1) # give normal to normal generator
-        loss2G2 = criterion2(outputg_2_id, X_real1)
-        # cycle loss (forward)  
-        outputg_1 = modelG_1(outputg_2.detach()) # give generated normal to monet generator
-        loss3G2 = criterion3(outputg_1, X_real2) # convert the generated normal to monet image
-        # cycle loss G2(backward)
-        outputg_1_id = modelG_1(X_real2) # give monet image to monet image generator
-        outputg_2_b = modelG_2(outputg_1_id.detach()) # give identity preserved real image to monet generator
-        loss4G2 = criterion4(outputg_2_b, outputg_2_id.detach())
-
-        lossG_2 = loss1G2 + 0*loss2G2 + 10*loss3G2 + 10*loss4G2
-        lossG_2.backward()
-        lossG_2 = lossG_2.item()
-
-        optimizerG_2.step()
+        set_model_grad(modelD_1, True)
+        set_model_grad(modelD_2, True)
 
         # Train Discriminator1
         # update on real batch 
-        optimizerD_1.zero_grad()
+        optimizerD.zero_grad()
         outputd_1_real = modelD_1(X_real1)
+        D_1_real = outputd_1_real.mean().item()
         lossd1_real = criterion1(outputd_1_real, y_real1)
 
         # update on fake batch
         outputd_1_fake = modelD_1(X_fake1.detach())
+        D_1_fake = outputd_1_fake.mean().item()
         lossd1_fake = criterion1(outputd_1_fake, y_fake1)
 
-        lossd1 = (lossd1_real + lossd1_fake)
+        lossd1 = (lossd1_real + lossd1_fake)/2
         lossd1.backward()
-        lossd1 = lossd1.item()
-
-        # Train Generator (real -> monet)
-        optimizerG_1.zero_grad()
-
-        # adversarial loss
-        outputg_1 = modelG_1(X_real1)
-        outputd_1 = modelD_1(outputg_1.detach())
-        loss1 = criterion1(outputd_1, y_fake1)
-        # identity loss
-        outputg_1_id = modelG_1(X_real2) # give monet to monet generator
-        loss2 = criterion2(outputg_1_id, X_real2)
-        # cycle loss (forward)  
-        outputg_2 = modelG_2(outputg_1) # give generated monet to normal generator
-        loss3 = criterion3(outputg_2, X_real1) # reverse the monet to original normal image
-        # cycle loss (backward)
-        outputg_2_id = modelG_2(X_real1) # give real image to real image generator
-        outputg_1_b = modelG_1(outputg_2_id.detach()) # give identity preserved real image to monet generator
-        loss4 = criterion4(outputg_1_b, outputg_1_id.detach())
-
-        lossG_1 = loss1 + 0*loss2 + 10*loss3 + 10*loss4
-        lossG_1.backward()
-        lossG_1 = lossG_1.item()
-
-        optimizerG_1.step()
 
         # Train Discrimator2
         # update on real batch
         outputd2_real = modelD_2(X_real2)
+        D_2_real = outputd2_real.mean().item()
         lossd2_real = criterion1(outputd2_real, y_real2)
 
         # update on fake batch
         outputd2_fake = modelD_2(X_fake2.detach())
+        D_2_fake = outputd2_fake.mean().item()
         lossd2_fake = criterion1(outputd2_fake, y_fake2)
 
-        lossd2 = lossd2_real + lossd2_fake
+        lossd2 = (lossd2_real + lossd2_fake)/2
         lossd2.backward()
-        lossd2 = lossd2.item()
 
-        optimizerD_2.step()
+        optimizerD.step()
+
+
+
+        
+        set_model_grad(modelD_1, False)
+        set_model_grad(modelD_2, False)
+        #Train Generator (monet -> real) and (real -> monet)
+        optimizerG.zero_grad()
+
+        D_1_horse, lossG_1 = train_composite_model(modelG_1, modelG_2, modelD_1, X_real1, X_real2, y_fake1)
+
+        D_2_zebra, lossG_2 = train_composite_model(modelG_2, modelG_1, modelD_2, X_real2, X_real1, y_fake2)
+
+        lossG = lossG_1 + lossG_2
+        lossG.backward()
+        optimizerG.step()
+
+
+
+
 
     if(epoch%1 == 0):
-        print("Epoch: ", epoch, "LossD1: ", lossd1, "LossG1: ", lossG_1, "LossD2: ", lossd2, "LossG2: ", lossG_2)
+        # print(f"Epoch: {epoch}, LossG_1: {lossG_1}, LossG_2: {lossG_2}, LossD_1: {lossd1}, LossD_2: {lossd2}")
+        print(f"Epoch: {epoch:.2f} D_1_real: {D_1_real:.2f}, D_1_fake: {D_1_fake:.2f}, D_2_real: {D_2_real:.2f}, D_2_fake: {D_2_fake:.2f}, D_1_horse: {D_1_horse:.2f}, D_2_zebra: {D_2_zebra:.2f}")
     if (epoch)%1 == 0:
-        create_checkpoint(modelG_1, optimizerG_1, epoch, lossG_1, multiGPU=True, type="G1")
-        create_checkpoint(modelD_1, optimizerD_1, epoch, lossd1, multiGPU=True, type="D1")
-        create_checkpoint(modelG_2, optimizerG_2, epoch, lossG_2, multiGPU=True, type="G2")
-        create_checkpoint(modelD_2, optimizerD_2, epoch, lossd2, multiGPU=True, type="D2")
+        create_checkpoint(modelG_1, optimizerG, epoch, lossG_1, multiGPU=True, type="G1")
+        create_checkpoint(modelD_1, optimizerD, epoch, lossd1, multiGPU=True, type="D1")
+        create_checkpoint(modelG_2, optimizerG, epoch, lossG_2, multiGPU=True, type="G2")
+        create_checkpoint(modelD_2, optimizerD, epoch, lossd2, multiGPU=True, type="D2")
         
