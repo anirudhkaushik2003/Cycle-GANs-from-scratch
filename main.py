@@ -28,7 +28,7 @@ manualSeed = 999
 print("Random Seed: ", manualSeed)
 random.seed(manualSeed)
 torch.manual_seed(manualSeed)
-torch.use_deterministic_algorithms(True) # Needed for reproducible results
+# torch.use_deterministic_algorithms(True) # Needed for reproducible results
 
 data_transforms = transforms.Compose([
     transforms.Resize(IMAGE_SIZE),
@@ -167,10 +167,10 @@ n_steps = batch_per_epoch * n_epoch
 
 def set_model_grad(model, flag=True, multiGPU=True):
     if multiGPU:
-        for param in model.module.features.parameters():
+        for param in model.module.parameters():
             param.requires_grad = flag
     else:
-        for param in model.features.parameters():
+        for param in model.parameters():
             param.requires_grad = flag
 
 
