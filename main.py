@@ -93,16 +93,15 @@ modelD_2 = torch.nn.DataParallel(modelD_2)
 modelG_2 = modelG_2.to(device)
 modelD_2 = modelD_2.to(device)
 
-learning_rate = 2e-5
+learning_rate = 1e-5
 # optimizerD_1 = torch.optim.Adam(modelD_1.parameters(), lr = learning_rate/10, betas=(0.5, 0.999))
 # optimizerD_2 = torch.optim.Adam(modelD_2.parameters(), lr = learning_rate/10, betas=(0.5, 0.999))
 
-optimizerD = torch.optim.Adam(itertools.chain(modelD_1.parameters(), modelD_2.parameters()), lr=learning_rate/10, betas=(0.5, 0.999))
+optimizerD = torch.optim.Adam(itertools.chain(modelD_1.parameters(), modelD_2.parameters()), lr=learning_rate, betas=(0.5, 0.999))
 
 
 # optimizerG_1 = torch.optim.Adam(modelG_1.parameters(), lr=learning_rate, betas=(0.5, 0.999))
 # optimizerG_2 = torch.optim.Adam(modelG_2.parameters(), lr=learning_rate, betas=(0.5, 0.999))
-
 optimizerG = torch.optim.Adam(itertools.chain(modelG_1.parameters(), modelG_2.parameters()), lr=learning_rate, betas=(0.5, 0.999))
 
 epochs = 100
@@ -166,9 +165,13 @@ batch_per_epoch = int(len(dataset) / BATCH_SIZE)
 n_steps = batch_per_epoch * n_epoch
 
 
-def set_model_grad(model, flag=True):
-    for param in model.features.parameters():
-        param.requires_grad = flag
+def set_model_grad(model, flag=True, multiGPU=True):
+    if multiGPU:
+        for param in model.module.features.parameters():
+            param.requires_grad = flag
+    else:
+        for param in model.features.parameters():
+            param.requires_grad = flag
 
 
 def train_composite_model(modelG, modelG_2, modelD_1, dataset1, dataset2, y_fake1):
@@ -239,30 +242,37 @@ for epoch in range(epochs):
         outputd_1_real = modelD_1(X_real1)
         D_1_real = outputd_1_real.mean().item()
         lossd1_real = criterion1(outputd_1_real, y_real1)
-
-        # update on fake batch
-        outputd_1_fake = modelD_1(X_fake1.detach())
-        D_1_fake = outputd_1_fake.mean().item()
-        lossd1_fake = criterion1(outputd_1_fake, y_fake1)
-
-        lossd1 = (lossd1_real + lossd1_fake)/2
-        lossd1.backward()
+        lossd1_real.backward()
 
         # Train Discrimator2
         # update on real batch
         outputd2_real = modelD_2(X_real2)
         D_2_real = outputd2_real.mean().item()
         lossd2_real = criterion1(outputd2_real, y_real2)
+        lossd2_real.backward()
 
+        optimizerD.step()
+
+        # Train Discriminator1
+        # update on fake batch
+        outputd_1_fake = modelD_1(X_fake1.detach())
+        D_1_fake = outputd_1_fake.mean().item()
+        lossd1_fake = criterion1(outputd_1_fake, y_fake1)
+        lossd1_fake.backward()
+
+        # Train Discrimator2
         # update on fake batch
         outputd2_fake = modelD_2(X_fake2.detach())
         D_2_fake = outputd2_fake.mean().item()
         lossd2_fake = criterion1(outputd2_fake, y_fake2)
-
-        lossd2 = (lossd2_real + lossd2_fake)/2
-        lossd2.backward()
+        lossd2_fake.backward()
 
         optimizerD.step()
+
+        lossd1 = (lossd1_real + lossd1_fake)
+        lossd2 = (lossd2_real + lossd2_fake)
+        
+
 
 
 
@@ -282,11 +292,10 @@ for epoch in range(epochs):
 
 
 
-
-
     if(epoch%1 == 0):
         # print(f"Epoch: {epoch}, LossG_1: {lossG_1}, LossG_2: {lossG_2}, LossD_1: {lossd1}, LossD_2: {lossd2}")
         print(f"Epoch: {epoch:.2f} D_1_real: {D_1_real:.2f}, D_1_fake: {D_1_fake:.2f}, D_2_real: {D_2_real:.2f}, D_2_fake: {D_2_fake:.2f}, D_1_horse: {D_1_horse:.2f}, D_2_zebra: {D_2_zebra:.2f}")
+        print(f"loss d1 real: {lossd1_real.item():.2f} loss d1 fake: {lossd1_fake.item():.2f} loss d2 real: {lossd2_real.item():.2f} loss d2 fake: {lossd2_fake.item():.2f}")
     if (epoch)%1 == 0:
         create_checkpoint(modelG_1, optimizerG, epoch, lossG_1, multiGPU=True, type="G1")
         create_checkpoint(modelD_1, optimizerD, epoch, lossd1, multiGPU=True, type="D1")
