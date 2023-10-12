@@ -14,13 +14,21 @@ from generator import Generator
 from discriminator import Discriminator
 from datasets import HorseDataset
 from datasets import ZebraDataset
-
+import random
 import itertools
 
 from utils import *
 
 BATCH_SIZE = 1
 IMAGE_SIZE = 256
+
+# Set random seed for reproducibility
+manualSeed = 999
+#manualSeed = random.randint(1, 10000) # use if you want new results
+print("Random Seed: ", manualSeed)
+random.seed(manualSeed)
+torch.manual_seed(manualSeed)
+torch.use_deterministic_algorithms(True) # Needed for reproducible results
 
 data_transforms = transforms.Compose([
     transforms.Resize(IMAGE_SIZE),
