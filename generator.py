@@ -13,7 +13,7 @@ class ResBlock(nn.Module):
             in_ch, out_ch, stride=stride, kernel_size=3, padding="same"
         )
         self.norm1 = nn.InstanceNorm2d(out_ch)
-        self.relu = nn.LeakyReLU(0.2)
+        self.relu = nn.ReLU(True)
 
         self.conv2 = nn.Conv2d(
             out_ch, out_ch, stride=stride, kernel_size=3, padding="same"
@@ -41,7 +41,7 @@ class DownBlock(nn.Module):
             in_ch, out_ch, kernel_size=k, stride=s, padding=p
         )
         self.norm = nn.InstanceNorm2d(out_ch)
-        self.relu = nn.LeakyReLU(0.2)
+        self.relu = nn.ReLU(True)
 
     def forward(self, x):
         x = self.conv(x)
@@ -56,7 +56,7 @@ class UpBlock(nn.Module):
             in_ch, out_ch, kernel_size=k, stride=s, padding=p, output_padding=1
         )
         self.norm = nn.InstanceNorm2d(out_ch)
-        self.relu = nn.LeakyReLU(0.2)
+        self.relu = nn.ReLU(True)
 
     def forward(self, x):
         x = self.conv(x)

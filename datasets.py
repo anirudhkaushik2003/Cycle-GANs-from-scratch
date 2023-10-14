@@ -6,11 +6,7 @@ from torchvision import transforms, datasets
 import cv2
 
 IMAGE_SIZE = 256
-data_transforms = transforms.Compose([
-    transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-    transforms.ToTensor(),
-    transforms.Normalize((0.5,), (0.5,)),
-])
+
 
 class ZebraDataset(Dataset):
     def __init__(self, root_zebra, transform=None):
@@ -64,3 +60,52 @@ class HorseDataset(Dataset):
     
 
 
+class AppleDataset(Dataset):
+    def __init__(self, root_apple, transform=None):
+        self.root_apple = root_apple
+        self.transform = transform
+
+        self.apple_images = os.listdir(root_apple)
+        self.length_dataset = len(self.apple_images) # 1000, 1500
+        self.apple_len = len(self.apple_images)
+
+    def __len__(self):
+        return self.length_dataset
+
+    def __getitem__(self, index):
+        apple_img = self.apple_images[index % self.apple_len]
+
+        apple_path = os.path.join(self.root_apple, apple_img)
+
+        apple_img = Image.open(apple_path).convert("RGB")
+
+
+        if self.transform:
+            apple_img = self.transform(apple_img)
+
+        return apple_img
+    
+
+class OrangeDataset(Dataset):
+    def __init__(self, root_orange, transform=None):
+        self.root_orange = root_orange
+        self.transform = transform
+
+        self.orange_images = os.listdir(root_orange)
+        self.length_dataset = len(self.orange_images) # 1000, 1500
+        self.orange_len = len(self.orange_images)
+
+    def __len__(self):
+        return self.length_dataset
+
+    def __getitem__(self, index):
+        orange_img = self.orange_images[index % self.orange_len]
+
+        orange_path = os.path.join(self.root_orange, orange_img)
+
+        orange_img = Image.open(orange_path).convert("RGB")
+
+        if self.transform:
+            orange_img = self.transform(orange_img)
+
+        return orange_img

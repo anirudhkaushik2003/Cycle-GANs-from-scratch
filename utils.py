@@ -13,16 +13,37 @@ def weights_init(m):
         nn.init.normal_(m.weight.data, 1.0, 0.02)
         nn.init.constant_(m.bias.data, 0)
 
+def update_image_pool(pool, images, max_size=50):
+    selected = list()
+    for image in images:
+        image = image.cpu().detach().numpy()
+        if len(pool) < max_size:
+            pool.append(image)
+            selected.append(image)
+        elif np.random.random() < 0.5: # 50% chance of using current image
+            selected.append(image)
+        else:
+            ix = np.random.randint(0, len(pool))
+            selected.append(pool[ix])
+            pool[ix] = image # 50% chance of using one of the stored images
 
-def create_checkpoint(model, optimizer, epoch, loss, multiGPU=False, type="G"):
+    return np.asarray(selected)
+
+def set_model_grad(model, flag=True, multiGPU=False):
+    if multiGPU:
+        for param in model.module.parameters():
+            param.requires_grad = flag
+    else:
+        for param in model.parameters():
+            param.requires_grad = flag
+
+def create_checkpoint(model, epoch, multiGPU=False, type="G"):
     if not multiGPU:
         filename = f'/ssd_scratch/cvit/anirudhkaushik/checkpoints/cycle_gan{type}_checkpoint_{epoch}_epoch.pt'
 
         checkpoint = {
             'model': model.state_dict(),
-            'optimizer': optimizer.state_dict(),
             'epoch': epoch,
-            'loss': loss
         }
         torch.save(checkpoint, filename)
 
@@ -30,9 +51,7 @@ def create_checkpoint(model, optimizer, epoch, loss, multiGPU=False, type="G"):
         filename = f'/ssd_scratch/cvit/anirudhkaushik/checkpoints/cycle_gan{type}_checkpoint_latest.pt'
         checkpoint = {
             'model': model.state_dict(),
-            'optimizer': optimizer.state_dict(),
             'epoch': epoch,
-            'loss': loss
         }
         torch.save(checkpoint, filename)
 
@@ -40,9 +59,7 @@ def create_checkpoint(model, optimizer, epoch, loss, multiGPU=False, type="G"):
         filename = f'/ssd_scratch/cvit/anirudhkaushik/checkpoints/cycle_gan{type}_checkpoint_{epoch}_epoch.pt'
         checkpoint = {
             'model': model.module.state_dict(),
-            'optimizer': optimizer.state_dict(),
             'epoch': epoch,
-            'loss': loss
         }
         torch.save(checkpoint, filename)
 
@@ -50,9 +67,7 @@ def create_checkpoint(model, optimizer, epoch, loss, multiGPU=False, type="G"):
         filename = f'/ssd_scratch/cvit/anirudhkaushik/checkpoints/cycle_gan{type}_checkpoint_latest.pt'
         checkpoint = {
             'model': model.module.state_dict(),
-            'optimizer': optimizer.state_dict(),
             'epoch': epoch,
-            'loss': loss
         }
         torch.save(checkpoint, filename)
 
@@ -62,16 +77,12 @@ def restart_last_checkpoint(model, optimizer, multiGPU=False, type="G"):
     if not multiGPU:
         checkpoint = torch.load(filename)
         model.load_state_dict(checkpoint['model'])
-        optimizer.load_state_dict(checkpoint['optimizer'])
         epoch = checkpoint['epoch']
-        loss = checkpoint['loss']
         print(f"Restarting from epoch {epoch}")
     else:
         checkpoint = torch.load(filename)
         model.module.load_state_dict(checkpoint['model'])
-        optimizer.load_state_dict(checkpoint['optimizer'])
         epoch = checkpoint['epoch']
-        loss = checkpoint['loss']
         print(f"Restarting from epoch {epoch}")
 
-    return epoch, loss
+    return epoch
