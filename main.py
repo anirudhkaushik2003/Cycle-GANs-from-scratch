@@ -76,7 +76,7 @@ dataset2 = torch.utils.data.Subset(dataset2, np.arange(min_length))
 dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 dataloader2 = DataLoader(dataset2, batch_size=BATCH_SIZE, shuffle=True)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # initialize models
 modelG_1 = Generator(IMAGE_SIZE, 3)
@@ -112,8 +112,19 @@ criterionGAN = nn.MSELoss() # adversarial loss
 criterionID = nn.L1Loss() # identity loss
 criterionCycle = nn.L1Loss() # cycle loss (forward)
 
-
-
+### PRINT STATS ###
+print("Discriminator Patch shape: ", patch_shape)
+print("Number of samples per epoch: ", len(dataset))
+print("Multi GPU: ", multiGPU)
+print("Learning rate: ", learning_rate)
+print("Batch size: ", BATCH_SIZE)
+print("Image size: ", IMAGE_SIZE)
+print("Number of epochs: ", epochs)
+print("Lambda 1: ", lambda_1)
+print("Lambda 2: ", lambda_2)
+print("Device: ", device)
+print("***********************")
+print("\n\n\n\n\n\n")
 ################# TRAINING #####################
     
 n_epoch, n_batch = epochs, BATCH_SIZE
@@ -214,6 +225,7 @@ for epoch in range(epochs):
         if (step+1) % 500 == 0:
             print(f"Epoch [{epoch+1}/{epochs}], Step [{step+1}/{n_steps}], lossD: {np.mean(lossD_list):.2f}, lossG: {np.mean(lossG_list):.2f}")
             print(f"pred_zebra: {(D_zebra/(step+1)):.2f}, pred_horse: {(D_horse/(step+1)):.2f}")
+            print()
 
 
     create_checkpoint(modelG_1, epoch, multiGPU, "G1")
