@@ -113,6 +113,8 @@ criterionID = nn.L1Loss() # identity loss
 criterionCycle = nn.L1Loss() # cycle loss (forward)
 
 ### PRINT STATS ###
+print("***********************")
+print(f"Converting {TRAIN_DIR.split('/')[-1].split('2')[0]}s to {TRAIN_DIR.split('/')[-1].split('2')[1]}s")
 print("Discriminator Patch shape: ", patch_shape)
 print("Number of samples per epoch: ", len(dataset))
 print("Multi GPU: ", multiGPU)
