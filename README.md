@@ -11,3 +11,8 @@ Implementing Cycle GANs from scratch in PyTorch
 <p align="center">
   <img src="./results/horse2zebra.gif" width=600px height=600px>
 </p>
+
+## Results Progression for horses to zebra translation from epoch 80 to epoch 88
+<p align="center">
+  <img src="./results/horse2zebra2.gif" width=600px height=600px>
+</p>
