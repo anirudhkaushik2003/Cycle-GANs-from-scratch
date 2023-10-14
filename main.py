@@ -43,24 +43,24 @@ data_transforms = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5)),
 ])
-TRAIN_DIR = "/ssd_scratch/cvit/anirudhkaushik/datasets/cyclegan/apple2orange/apple2orange/"
-VAL_DIR = "/ssd_scratch/cvit/anirudhkaushik/datasets/cyclegan/apple2orange/apple2orange/"
+TRAIN_DIR = "/ssd_scratch/cvit/anirudhkaushik/datasets/cyclegan/horse2zebra/horse2zebra/"
+VAL_DIR = "/ssd_scratch/cvit/anirudhkaushik/datasets/cyclegan/horse2zebra/horse2zebra/"
 
-dataset = AppleDataset(
-    root_apple=TRAIN_DIR + "/trainA",
+dataset = HorseDataset(
+    root_horse=TRAIN_DIR + "/trainA",
     transform=data_transforms,
 )
-val_dataset = AppleDataset(
-    root_apple=VAL_DIR + "/testA",
+val_dataset = HorseDataset(
+    root_horse=VAL_DIR + "/testA",
     transform=data_transforms,
 )
 
-dataset2 = OrangeDataset(
-    root_orange=TRAIN_DIR + "/trainB",
+dataset2 = ZebraDataset(
+    root_zebra=TRAIN_DIR + "/trainB",
     transform=data_transforms,
 )
-val_dataset2 = OrangeDataset(
-    root_orange=VAL_DIR + "/testB",
+val_dataset2 = ZebraDataset(
+    root_zebra=VAL_DIR + "/testB",
     transform=data_transforms,
 )
 
