@@ -9,29 +9,23 @@ class ResBlock(nn.Module):
     def __init__(self, in_ch, out_ch, stride=1):
         super(ResBlock, self).__init__()
 
-        self.conv1 = nn.Conv2d(
-            in_ch, out_ch, stride=stride, kernel_size=3, padding="same"
+        self.conv1 = nn.Sequential(
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(in_ch, out_ch, kernel_size=3, stride=stride, padding=0),
+            nn.InstanceNorm2d(out_ch),
+            nn.ReLU(True)
         )
-        self.norm1 = nn.InstanceNorm2d(out_ch)
-        self.relu = nn.ReLU(True)
 
-        self.conv2 = nn.Conv2d(
-            out_ch, out_ch, stride=stride, kernel_size=3, padding="same"
+
+        self.conv2 = nn.Sequential(
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(in_ch, out_ch, kernel_size=3, stride=stride, padding=0),
+            nn.InstanceNorm2d(out_ch)
         )
-        self.norm2 = nn.InstanceNorm2d(out_ch)
+        
 
     def forward(self, x):
-        x_cp = x.clone()
-        x = self.conv1(x)
-        x = self.norm1(x)
-        x = self.relu(x)
-
-        x = self.conv2(x)
-        x = self.norm2(x)
-
-        # x = torch.cat((x, x_cp), dim=1)
-        x = x + x_cp
-        return x
+        return x + self.conv2(self.conv1(x))
 
 
 class DownBlock(nn.Module):
@@ -70,7 +64,12 @@ class Generator(nn.Module):
         self.img_channels = img_channels
         self.img_size = img_size
 
-        self.conv1 = DownBlock(img_channels, 64, 7, 1, p=3) # conv2d
+        self.conv1 = nn.Sequential(
+            nn.ReflectionPad2d(3),
+            nn.Conv2d(in_channels=img_channels, out_channels=64, kernel_size=7, stride=1, padding=0, bias=False),
+            nn.InstanceNorm2d(64),
+            nn.ReLU(True)
+        )
 
         self.conv2 = DownBlock(64, 128, 3, 2, 1) # down sample
         self.conv3 = DownBlock(128, 256, 3, 2, 1) # down sample
@@ -85,7 +84,11 @@ class Generator(nn.Module):
         self.conv4 = UpBlock(256, 128, 3, 2, 1) # up sample
         self.conv5 = UpBlock(128, 64, 3, 2, 1) # up sample
 
-        self.conv6 = DownBlock(64, img_channels, 7, 1, p=3) # conv2d
+        self.conv6 = nn.Sequential(
+            nn.ReflectionPad2d(3),
+            nn.Conv2d(in_channels=64, out_channels=img_channels, kernel_size=7, stride=1, padding=0, bias=False),
+        )
+
         self.tanh = nn.Tanh()
 
     def forward(self, x):

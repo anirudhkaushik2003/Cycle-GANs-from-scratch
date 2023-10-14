@@ -33,7 +33,6 @@ class Discriminator(nn.Module):
         # self.conv4 = Block(256, 512) # 16
         self.conv5 = Block(256, 512, stride=1) # 15
         self.out = nn.Conv2d(512, 1, 4, padding=1) # 15
-        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         x = self.conv1(x)
@@ -42,6 +41,5 @@ class Discriminator(nn.Module):
         # x = self.conv4(x)
         x = self.conv5(x)
         x = self.out(x)
-        x = self.sigmoid(x)
 
         return x
