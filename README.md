@@ -16,3 +16,8 @@ Implementing Cycle GANs from scratch in PyTorch
 <p align="center">
   <img src="./results/horse2zebra2.gif" width=600px height=600px>
 </p>
+
+## Result for epoch 100
+Horse image        $\rightarrow$     |  Corresponding zebra image
+:-------------------------:|:-------------------------:
+![](results/donkey.jpg)  |  ![](results/zebra.jpg)
